@@ -6,7 +6,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use quickping::{config::Config, parse_msg, send, shutdown_signal, state::AppState};
+use quickping::{AppState, config::Config, message, send, shutdown_signal};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -46,7 +46,7 @@ async fn healtz() -> StatusCode {
 }
 
 async fn post_default(State(state): State<Arc<AppState>>, body: String) -> StatusCode {
-    send(&state, "default", &parse_msg(body)).await
+    send(&state, "default", message::parse(body)).await
 }
 
 async fn post_with_name(
@@ -54,5 +54,5 @@ async fn post_with_name(
     Path(name): Path<String>,
     body: String,
 ) -> StatusCode {
-    send(&state, &name, &parse_msg(body)).await
+    send(&state, &name, message::parse(body)).await
 }

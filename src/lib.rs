@@ -1,71 +1,47 @@
 use reqwest::StatusCode;
 use tokio::signal;
 
-use crate::{
-    config::{Credentials, Entry, Remote},
-    message::Message,
-    state::AppState,
-};
+use crate::{config::Config, message::Message};
 
 pub mod config;
 pub mod message;
-pub mod state;
 
-/// Accept a bare string or passthrough discord Webhook Content
-pub fn parse_msg(body: String) -> Message {
-    serde_json::from_str(&body).unwrap_or_else(|_| Message {
-        content: Some(body.trim().to_string()),
-        ..Default::default()
-    })
+pub struct AppState {
+    pub config: Config,
+    pub http: reqwest::Client,
 }
 
-pub async fn send(state: &AppState, name: &str, msg: &Message) -> StatusCode {
-    let result = if name == "default" {
-        tracing::debug!("sending to 'default'");
-        match &state.config.default {
-            Entry::Credentials(c) => id_token(&state.http, c, msg).await,
-            Entry::Url(r) => webhook(&state.http, r, msg).await,
-        }
-    } else {
-        tracing::debug!("sending to '{name}'");
-        match state.config.others.get(name) {
-            Some(Entry::Credentials(c)) => id_token(&state.http, c, msg).await,
-            Some(Entry::Url(r)) => webhook(&state.http, r, msg).await,
-            None => {
-                tracing::error!("no target named '{name}'");
-                return StatusCode::NOT_FOUND;
-            }
-        }
+pub fn fill<T: Clone>(slot: &mut Option<T>, value: &Option<T>) {
+    if slot.is_none() {
+        *slot = value.clone();
+    }
+}
+
+pub async fn send(state: &AppState, name: &str, mut msg: Message) -> StatusCode {
+    let Some(target) = state.config.get(name) else {
+        tracing::error!("no target named '{name}'");
+        return StatusCode::NOT_FOUND;
     };
 
+    msg.apply(&target.overrides);
+
+    tracing::debug!("sending to '{name}'");
+
+    let result = state
+        .http
+        .post(&target.url)
+        .json(&msg)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status());
+
     match result {
-        Ok(()) => StatusCode::OK,
+        Ok(_) => StatusCode::OK,
         Err(e) => {
             tracing::error!("failed to send to {name}: {e}");
             StatusCode::BAD_GATEWAY
         }
     }
-}
-
-async fn webhook(http: &reqwest::Client, r: &Remote, msg: &Message) -> reqwest::Result<()> {
-    http.post(&r.url)
-        .json(msg)
-        .send()
-        .await?
-        .error_for_status()?;
-    Ok(())
-}
-
-async fn id_token(http: &reqwest::Client, c: &Credentials, msg: &Message) -> reqwest::Result<()> {
-    http.post(format!(
-        "https://discord.com/api/webhooks/{}/{}",
-        c.id, c.token
-    ))
-    .json(msg)
-    .send()
-    .await?
-    .error_for_status()?;
-    Ok(())
 }
 
 pub async fn shutdown_signal() {
@@ -98,29 +74,4 @@ pub async fn shutdown_signal() {
     }
 
     tracing::info!("shutdown signal received");
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parse_msg;
-    use serde_json::json;
-
-    #[test]
-    fn bare_string_becomes_content() {
-        let json = serde_json::to_value(parse_msg("   it happened \n".into())).unwrap();
-        assert_eq!(json, json!({ "content": "it happened" }));
-    }
-
-    #[test]
-    fn params_pass_through() {
-        let body = r#"{"content": "hi", "username": "bot", "flags": 4096,"embeds": [{ "title": "embed", "color": 5763719 }]}"#;
-        let json = serde_json::to_value(parse_msg(body.into())).unwrap();
-        assert_eq!(
-            json,
-            json!({
-                "content": "hi", "username": "bot", "flags": 4096,
-                "embeds": [{ "title": "embed", "color": 5763719 }]
-            })
-        );
-    }
 }
