@@ -15,12 +15,12 @@ services:
     ports:
       - "3000:3000"
     configs:
-      - source: quickping_config
+      - source: qp_config
         target: /etc/quickping/config.toml
     restart: unless-stopped
 
 configs:
-  quickping_config:
+  qp_config:
     content: |
       [default]
       url = "https://discord.com/api/webhooks/..."
