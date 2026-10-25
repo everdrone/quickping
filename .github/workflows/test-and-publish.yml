@@ -1,19 +1,29 @@
-name: Create and publish a Docker image
+name: Test and publish
 
-# run this workflow on every new pushed tag
 on:
     push:
-        tags:
-            - "*"
+        branches: ["main"]
+        tags: ["*"]
+    pull_request:
 
 env:
     REGISTRY: ghcr.io
     IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-    build-and-push-image:
+    test:
         runs-on: ubuntu-latest
-        # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
+        steps:
+            - uses: actions/checkout@v6
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+            - run: cargo test --locked
+
+    build-and-push-image:
+        needs: test
+        # only runs when new tags are pushed
+        if: startsWith(github.ref, 'refs/tags/')
+        runs-on: ubuntu-latest
         permissions:
             contents: read
             packages: write
