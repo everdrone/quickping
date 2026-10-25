@@ -30,3 +30,17 @@ configs:
       id = 1234567890...
       token = "aBcDEfGhiJkl..."
 ```
+
+## Usage
+
+To quickly send a message
+
+```sh
+curl localhost:3000 -d 'ping'
+```
+
+Messages can be customized using discord's event [webhook content schema](https://docs.discord.com/developers/resources/webhook#execute-webhook)
+
+```sh
+curl localhost:3000 -d '{"embeds":[{"title":"embed title","color":5763719}],"username":"CustomName"}'
+```
