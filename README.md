@@ -17,6 +17,7 @@ services:
     configs:
       - source: qp_config
         target: /etc/quickping/config.toml
+        mode: 0444
     restart: unless-stopped
 
 configs:
